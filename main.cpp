@@ -67,7 +67,7 @@ int main(int argc,char **argv){
     /*wait for connecction, then accept*/
     
     while(1){
-        printf("enter while loop\n");
+        printf("Enter while loop\n");
         int *new_s=(int *)malloc(sizeof(int));
         if((*new_s = accept(listenfd, (struct sockaddr *)&client_addr,&addr_len ))>=0){
             if(DEBUG)printf("Accepted connection\n");
@@ -161,47 +161,49 @@ void *webtalk(void * socket_desc){
     pthread_mutex_lock(&mutex);
     
     if(DEBUG)printf("Enter handler\n");
-    
     int new_s= *(int *)socket_desc;
-    
-    
     int serverPort;
     
-    if(DEBUG)cout<<"seg point"<<endl;
     
-    char url[MAX_MSG_LENGTH];
+    
     char buf[MAX_MSG_LENGTH];
     char host[MAX_MSG_LENGTH];
-    char  *token,*cmd, *version, *file, *brkt;
+    char  *url=NULL, *token=NULL,*cmd=NULL, *version=NULL, *file=NULL, *brkt=NULL;
     ssize_t bytes_read;
     token=" \r\n";
     
-    if ( (bytes_read = read (new_s,buf,sizeof(buf)) ) >0){
+    if ( (bytes_read = read (new_s,buf,MAX_MSG_LENGTH) ) >0){
         if(DEBUG)printf("read succeed\n");
-        if(DEBUG)printf("%s\n", buf);
+        buf[bytes_read]=0;
+        if(DEBUG)cout<<buf<<endl;
+        
+        bool keep_alive=false;
+        char * p=strstr(buf, "Connection: keep-alive\r\n");
+        if(p!=NULL){
+            keep_alive=true;
+        }
+        
+        /*Parsing HTTP*/
+        char *nbuf=strdup(buf);
+        
+        
+        if (DEBUG) cout<<"Parsing this Request:  "<<nbuf<<endl;
+        cmd=strtok_r(nbuf, token, &brkt);
+        url=strtok_r(NULL, token, &brkt);
+        version = strtok_r(NULL, token, &brkt);
+        parseAddress(url,host,&file, &serverPort);
+    }
+    else{
+        perror("Read error:");
     }
     
-    buf[bytes_read]=0;
-    
-    bool keep_alive=false;
-    char * p=strstr(buf, "Connection: keep-alive\r\n");
-    if(p!=NULL){
-        keep_alive=true;
-    }
-    
-    /*Parsing HTTP*/
-    char *nbuf=strdup(buf);
-    cmd=strtok_r(nbuf, token, &brkt);
-    strcpy(url, strtok_r(NULL, token, &brkt));
-    version = strtok_r(NULL, token, &brkt);
-    parseAddress(url,host,&file, &serverPort);
     
     char reply[MAX_MSG_LENGTH];
     
     if (strcmp(cmd, "GET")==0) {
         if (response_from_cache(new_s,url)) {
             /*return from cache*/
-            if(DEBUG)cout<<"Response from Cache"<<endl;
+            if(DEBUG)cout<<"Response from Cache succeed"<<endl;
         }
         else{
             if (DEBUG) cout<<"Querying from server"<<endl;
@@ -212,7 +214,7 @@ void *webtalk(void * socket_desc){
             /*Connect to the server*/
             int sock=conn_server(buf, host,serverPort );
             ssize_t recv_len = 0;
-                //sending request
+            //sending request
             if (send(sock, buf, MAX_MSG_LENGTH, 0) < 0) {
                 perror("Send error:");
                 
@@ -244,10 +246,13 @@ void *webtalk(void * socket_desc){
                 if(DEBUG) cout<<"reply buffer sent!"<<endl;
                 
                 /*===Add this reply to response body===*/
+               // reply[recv_len]=0;
+                
                 this_entry.response_body.push_back(reply);
                 
+                if(DEBUG) cout<<"*************Thie entry is :"<<this_entry.response_body.back()<<endl;
+                
                 memset(reply, 0, sizeof(reply));
-               
             }
             
             /*Close server socket*/
@@ -260,10 +265,13 @@ void *webtalk(void * socket_desc){
             
         }
     }
+    
     /*close browser socket*/
+    if (DEBUG) cout<<"Closing socket"<<endl;
     close(new_s);
     free(socket_desc);
     pthread_mutex_unlock(&mutex);
+    if (DEBUG) cout<<"EXIT HANDLER"<<endl;
     
     return NULL;
 }
@@ -277,27 +285,72 @@ void cache_response(CacheEntry entry){
         myCache.pop_front();
     }
     myCache.push_back(entry);
+    
+    if (DEBUG) {
+        cout<<"*************Cached response url is :"<< entry.p_url;
+    
+        for (deque<string>::reverse_iterator it=entry.response_body.rbegin(); it!=entry.response_body.rend(); ++it) {
+            cout<<"*****************Cahced response http is :"<<*it<<endl;
+        }
+    }
     if (DEBUG) cout<<"Response Cached"<<endl;
 }
 
 bool response_from_cache(int browserfd, char *url){
- for (deque<CacheEntry>::iterator it=myCache.begin(); it!=myCache.end(); ++it) {
-     if (strcmp(it->p_url,url)==0) {
-         CacheEntry move2back;
-         move2back.p_url=it->p_url;
-         move2back.response_body=it->response_body;
-         
-         while (it->response_body.size() >0) {
-             if (send(browserfd, it->response_body.front(), sizeof(it->response_body.front()), 0) < 0) {
-                 perror("Send error:");
-                 
-             }
-             it->response_body.pop_front();
-         }
-         return true;
-     }
- 
- }
-    return false;
+    for (deque<CacheEntry>::iterator it=myCache.begin(); it!=myCache.end(); ++it) {
+        if (strcmp(it->p_url,url)==0) {
+            if(DEBUG)cout<<"HITTTTTTTTT!!!!!!Response from Cache"<<endl;
+            CacheEntry move2back;
+            move2back.p_url=it->p_url;
+            move2back.response_body=it->response_body;
+            
+            while (it->response_body.size() >0) {
+                if(DEBUG){
+                    cout<<"Browser fd is :"<<browserfd<<endl;
+                    cout<<"Cache Entry is: "<<it->response_body.front()<<endl;
+                    
+                }
+                
+                string str = it->response_body.front();
+                char *cstr = new char[str.length() + 1];
+                strcpy(cstr, str.c_str());
+                // do stuff
+                
+                //char *buf=strdup(it->response_body.front().c_str());
+                
+                
+                
+                size_t nleft = strlen(cstr);
+                ssize_t nwritten;
+                
+                
+                char *bufp =  cstr;
+                
+                while (nleft > 0) {
+                    if ((nwritten = send(browserfd, bufp, nleft,0)) <= 0) {
+                        if (errno == EINTR) // interrupted by sig handler return
+                            nwritten = 0;    // and call write() again
+                        else
+                            break;       // errorno set by write()
+                    }
+                    if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
+                    nleft -= nwritten;
+                    bufp += nwritten;
+                    
+                }
 
+                delete [] cstr;
+                
+                it->response_body.pop_front();
+               
+            }
+            
+            myCache.erase(it);
+            myCache.push_back(move2back);
+            return true;
+        }
+        
+    }
+    return false;
+    
 }

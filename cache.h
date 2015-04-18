@@ -38,7 +38,7 @@ using std::queue;
 
 typedef struct CacheEntry{
     char *p_url;
-    deque<char *> response_body;
+    deque<string> response_body;
     //struct CacheEntry * next;
 }CacheEntry;
 
