@@ -3,6 +3,8 @@
 
 
 pthread_mutex_t mutex;
+
+
 void *webtalk(void * socket_desc);
 
 int main(int argc,char **argv){
@@ -24,10 +26,8 @@ int main(int argc,char **argv){
     cache_size =atoi(argv[2]);
     
     //Implementation Details: 2. Make sure that your proxy ignores SGIPIPE signals by installing the ignore function as handler.
+    
     signal(SIGPIPE,SIG_IGN);
-    
-    
-    
     struct sockaddr_in client_addr;
     
     /* build address data structure*/
@@ -162,7 +162,11 @@ void *webtalk(void * socket_desc){
     if(DEBUG)printf("Enter handler\n");
     
     int new_s= *(int *)socket_desc;
+    free(socket_desc);
+    
     int serverPort;
+    
+    if(DEBUG)cout<<"seg point"<<endl;
     
     char url[MAX_MSG_LENGTH];
     char buf[MAX_MSG_LENGTH];
@@ -191,15 +195,19 @@ void *webtalk(void * socket_desc){
     version = strtok_r(NULL, token, &brkt);
     parseAddress(url,host,&file, &serverPort);
     
-    char reply[MAX_MSG_LENGTH*3];
+    char reply[MAX_MSG_LENGTH];
     
     if (strcmp(cmd, "GET")==0) {
         if (false) {
             /*return from cache*/
         }
         else{
-            /*read from server*/
             
+            /*===Cache Response Start===*/
+            CacheEntry this_entry;
+            this_entry.p_url=strdup(url);
+            
+            /*Connect to the server*/
             int sock=conn_server(buf, host,serverPort );
             ssize_t recv_len = 0;
             
@@ -209,13 +217,17 @@ void *webtalk(void * socket_desc){
             }
             bzero(reply, sizeof(reply));
             
-            while((recv_len = read(sock, reply,sizeof(reply)))>0){
+            /*Read from server*/
+            while((recv_len = read(sock, reply,sizeof(reply)))> 0){
+                
                 size_t nleft = recv_len;
                 ssize_t nwritten;
+                
+                
                 char *bufp =  reply;
                 
                 while (nleft > 0) {
-                    if ((nwritten = write(new_s, bufp, nleft)) <= 0) {
+                    if ((nwritten = send(new_s, bufp, nleft,0)) <= 0) {
                         if (errno == EINTR) // interrupted by sig handler return
                             nwritten = 0;    // and call write() again
                         else
@@ -224,44 +236,24 @@ void *webtalk(void * socket_desc){
                     if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
                     nleft -= nwritten;
                     bufp += nwritten;
+                    
                 }
-                /*
-                 if (send(new_s, reply, sizeof(reply), 0)<0) {
-                 if(errno==EINTR)continue;
-                 perror("Failed to send response to browser");
-                 }
-                 
-                 if(DEBUG)printf("Server reply:\n%s\n", reply);
-                 */
-                memset(reply, 0, sizeof(reply));
+               // this_entry.response_body.
+                if(DEBUG) cout<<"reply buffer sent!"<<endl;
                 
+                memset(reply, 0, sizeof(reply));
+               
             }
             
-            /*
-             if (recv_len < 0) {
-             perror("Recv error:");
-             
-             }
-             */
-            reply[recv_len] = 0;
-            
-            
-            
-            /*!!!!!TODO:cache or send response back to browser
-             if (cacheble()) {
-             add to cache linkedlist
-             cache_http_response(reply);
-             }
-             else{
-             send back to browser
-             proxyToBrowser(reply);
-             }
-             */
-            
+            /*Close server socket*/
+            close(sock);
+            if(DEBUG)cout<<"Whole response received"<<endl;
             
         }
     }
-    pthread_mutex_unlock(&mutex);
+    /*close browser socket*/
     close(new_s);
+    pthread_mutex_unlock(&mutex);
+    
     return NULL;
 }

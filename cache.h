@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <deque>
 #include <string>
+#include <queue>
 #include "csapp.h"
 
 #define DEBUG 1
@@ -32,11 +33,12 @@ using std::deque;
 using std::string;
 using std::cout;
 using std::endl;
+using std::queue;
 
 
 typedef struct CacheEntry{
-    string p_url;
-    string response_body;
+    char *p_url;
+    deque<char *> response_body;
     //struct CacheEntry * next;
 }CacheEntry;
 
