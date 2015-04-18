@@ -67,7 +67,7 @@ int main(int argc,char **argv){
     /*wait for connecction, then accept*/
     
     while(1){
-        printf("Enter while loop\n");
+        if(DEBUG)cout<<"Enter Handler"<<endl;
         int *new_s=(int *)malloc(sizeof(int));
         if((*new_s = accept(listenfd, (struct sockaddr *)&client_addr,&addr_len ))>=0){
             if(DEBUG)printf("Accepted connection\n");
@@ -237,7 +237,7 @@ void *webtalk(void * socket_desc){
                         else
                             break;       // errorno set by write()
                     }
-                    if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
+                    //if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
                     nleft -= nwritten;
                     bufp += nwritten;
                     
