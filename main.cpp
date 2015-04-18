@@ -1,9 +1,9 @@
 #include "cache.h"
-#include "csapp.h"
-#define MAX_MSG_LENGTH 8192
+
+
 #define MAX_BACK_LOG (5)
 
-#define DEBUG 1
+
 
 int CacheSize;
 
@@ -217,11 +217,11 @@ void proxy_to_browser(int new_s, string response){
 
 void *webtalk(void * socket_desc){
     
-    //
-     pthread_mutex_lock(&mutex);
+    
+    pthread_mutex_lock(&mutex);
     if(DEBUG)printf("Enter handler\n");
     
-    int new_s= *(int *)socket_desc;
+    int browserfd= *(int *)socket_desc;
     int serverPort;
     
     char url[MAX_MSG_LENGTH];
@@ -229,17 +229,26 @@ void *webtalk(void * socket_desc){
     char host[MAX_MSG_LENGTH];
     char  *token,*cmd, *version, *file, *brkt;
     
-    char * request_buf;
-    ssize_t bytes_read;
     token=" \r\n";
     
+    rio_t browser;
+    rio_readinitb(&browser,browserfd);
     
-    while( (bytes_read = read (new_s,buf,sizeof(buf)) ) >0){
-        if(DEBUG)printf("read succeed\n");
-        if(DEBUG)printf("HTTP REQUEST IS : %s\n", buf);
-        
-        
+    /*Read the first line from browser*/
+    int bytes_read=0;
+    int tries=0;
+    
+    while((bytes_read = Rio_readlineb(&browser, buf, MAX_MSG_LENGTH)) < 1)
+    {
+        if(tries < 10)
+            ++tries;
+        else
+            return NULL;
+        continue;
     }
+    
+    if(DEBUG)printf("read succeed\n");
+    if(DEBUG)printf("HTTP REQUEST IS : %s\n", buf);
     
     buf[bytes_read]=0;
     
@@ -266,38 +275,31 @@ void *webtalk(void * socket_desc){
         if (response.length()>0) {/*return from cache*/
             cout<<"Response from cache"<<endl;
             /*foward http_resonse to browser*/
-            proxy_to_browser(new_s, response);
+            proxy_to_browser(browserfd, response);
             
         }
         
         else{/*read from server*/
             cout<<"Reading from server"<<endl;
-            int sock=conn_server(buf, host,serverPort );
+            int serverfd=conn_server(buf, host,serverPort );
             ssize_t recv_len = 0;
             
             /*send http_request to server*/
-            if (send(sock, buf, sizeof(buf), 0) < 0) {
+            if (send(serverfd, buf, sizeof(buf), 0) < 0) {
                 perror("Send error:");
             }
             
-            bzero(reply, sizeof(reply));
+            response=socket_read(serverfd);
             
-            /*read http_response from server*/
-            while((recv_len = read(sock, reply,sizeof(reply)))>0){
-                string append;
-                append.copy(reply, recv_len);
-                response+=append;
-                memset(reply, 0, sizeof(reply));
-            }
             if(DEBUG) cout<<"HTTP Response is: "<<response<<endl;
-            proxy_to_browser(new_s,response);
+            proxy_to_browser(browserfd,response);
             cache_response(url,response);
         }
         
         
     }
     
-    close(new_s);
+    close(browserfd);
     if (DEBUG) cout<<"Exit Handler"<<endl;
     pthread_mutex_unlock(&mutex);
     

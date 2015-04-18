@@ -23,6 +23,10 @@
 #include <stdbool.h>
 #include <deque>
 #include <string>
+#include "csapp.h"
+
+#define DEBUG 1
+#define MAX_MSG_LENGTH 8192
 
 using std::deque;
 using std::string;
@@ -42,6 +46,24 @@ string response_from_cache(string url);
 
 void cache_response(string url,string response);
 
+string socket_read(int fd){
+    string result;
+    
+    char buf[MAX_MSG_LENGTH];
+    int byteCount=0;
+    rio_t my_rio;
+    bzero(buf,sizeof(buf));
+    Rio_readinitb(&my_rio, fd);
+    while ( (byteCount = Rio_readlineb(&my_rio,buf,MAX_MSG_LENGTH))>0) {
+        string append;
+        append.copy(buf,byteCount);
+        result+=append;
+        if(DEBUG)cout<<"Append this to result"<<endl;
+        if(DEBUG)cout<<"Read result in this loop"<<result<<endl;
+        memset(buf,0,sizeof(buf));
+    }
+    return result;
+}
 
 
 
