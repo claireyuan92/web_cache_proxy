@@ -163,7 +163,7 @@ void parseAddress(char* url, char* host, char** file, int* serverPort){
 
 
 
-int conn_server(const char * http_request,char * hostname, int serverPort){
+int conn_server(char * hostname, int serverPort){
     int sock;
     struct sockaddr_in server_addr;
     struct hostent *hp;
@@ -246,17 +246,18 @@ void *webtalk(void * socket_desc){
             return NULL;
         continue;
     }
-    
-    if(DEBUG)printf("read succeed\n");
-    if(DEBUG)printf("HTTP REQUEST IS : %s\n", buf);
-    
     buf[bytes_read]=0;
     
+
+    
+    
+    /*MIGHT BE USEFUL FOR PERSISTENT CONNECTION*/
     bool keep_alive=false;
     char * p=strstr(buf, "Connection: keep-alive\r\n");
     if(p!=NULL){
         keep_alive=true;
     }
+    
     
     /*Parsing HTTP*/
     char *nbuf=strdup(buf);
@@ -265,14 +266,28 @@ void *webtalk(void * socket_desc){
     version = strtok_r(NULL, token, &brkt);
     parseAddress(url,host,&file, &serverPort);
     
-    char reply[MAX_MSG_LENGTH];
+    string request;
+    request.assign(buf);
+    
+    while((bytes_read = Rio_readlineb(&browser, buf, MAX_MSG_LENGTH)) > 0)
+    {
+        request+=buf;
+    }
+    
+    char *request_buf=strdup(request.c_str());
+    
+    if(DEBUG)printf("read succeed\n");
+    if(DEBUG)printf("HTTP REQUEST IS : %s\n", request_buf);
+    
     string response;
+
     
     if (strcmp(cmd, "GET")==0) {
         if(DEBUG) cout<<"GET request received"<<endl;
-        response=response_from_cache(url);
         
-        if (response.length()>0) {/*return from cache*/
+       // response=response_from_cache(url);
+        
+        if (false){//response.length()>0) {/*return from cache*/
             cout<<"Response from cache"<<endl;
             /*foward http_resonse to browser*/
             proxy_to_browser(browserfd, response);
@@ -281,27 +296,33 @@ void *webtalk(void * socket_desc){
         
         else{/*read from server*/
             cout<<"Reading from server"<<endl;
-            int serverfd=conn_server(buf, host,serverPort );
+            int serverfd=conn_server(host,serverPort );
             ssize_t recv_len = 0;
             
             /*send http_request to server*/
-            if (send(serverfd, buf, sizeof(buf), 0) < 0) {
+            if (send(serverfd,request_buf, sizeof(buf), 0) < 0) {
                 perror("Send error:");
             }
             
+            /*response from server*/
+            
+            
+            char temp_reply[MAX_MSG_LENGTH];
+        
             response=socket_read(serverfd);
             
             if(DEBUG) cout<<"HTTP Response is: "<<response<<endl;
             proxy_to_browser(browserfd,response);
-            cache_response(url,response);
+            //cache_response(url,response);
         }
         
         
     }
     
     close(browserfd);
-    if (DEBUG) cout<<"Exit Handler"<<endl;
     pthread_mutex_unlock(&mutex);
+    if (DEBUG) cout<<"Exit Handler"<<endl;
+    
     
     return NULL;
 }
