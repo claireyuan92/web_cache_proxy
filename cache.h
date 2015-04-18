@@ -55,10 +55,8 @@ string socket_read(int fd){
     bzero(buf,sizeof(buf));
     Rio_readinitb(&my_rio, fd);
     while ( (byteCount = Rio_readlineb(&my_rio,buf,MAX_MSG_LENGTH))>0) {
-        if (DEBUG) cout<<"Bytes read from server in this loop:"<<byteCount<<endl;
+        //if (DEBUG) cout<<"Bytes read from server in this loop:"<<byteCount<<endl;
         result+=buf;
-        if(DEBUG)cout<<"Append this to result"<<buf<<endl;
-        if(DEBUG)cout<<"*********Read result in this loop"<<result<<endl;
         memset(buf,0,sizeof(buf));
     }
     return result;
