@@ -1,21 +1,14 @@
 #include "cache.h"
-
-
 #define MAX_BACK_LOG (5)
 
 
-
-int CacheSize;
-
-void *webtalk(void * socket_desc);
-
-
-
 pthread_mutex_t mutex;
+void *webtalk(void * socket_desc);
 
 int main(int argc,char **argv){
     
     uint16_t port;
+    int cache_size;
     
     if(argc < 3){
         printf("Command should be: <port>  <size of cache in MBs>\n");
@@ -28,10 +21,11 @@ int main(int argc,char **argv){
         return 1;
     }
     
-    CacheSize=atoi(argv[2]);
+    cache_size =atoi(argv[2]);
     
-    //Implementation Details: 2. Make sure that your proxy ignores SIGPIPE signals by installing the ignore function as handler.
+    //Implementation Details: 2. Make sure that your proxy ignores SGIPIPE signals by installing the ignore function as handler.
     signal(SIGPIPE,SIG_IGN);
+    
     
     
     struct sockaddr_in client_addr;
@@ -73,13 +67,11 @@ int main(int argc,char **argv){
     
     while(1){
         printf("enter while loop\n");
-       
         int *new_s=(int *)malloc(sizeof(int));
         if((*new_s = accept(listenfd, (struct sockaddr *)&client_addr,&addr_len ))>=0){
             if(DEBUG)printf("Accepted connection\n");
             pthread_create(&thread_id, NULL, webtalk, (void *)new_s);
             pthread_detach(thread_id);
-            
         }
         else{
             free(new_s);
@@ -91,39 +83,7 @@ int main(int argc,char **argv){
 }
 
 
-string response_from_cache(string url){
-    for (deque<CacheEntry>::iterator it=myCache.begin(); it!=myCache.end(); ++it) {
-        if (it->p_url.compare(url)==0 ){
-            CacheEntry move2back;
-            move2back.p_url=it->p_url;
-            move2back.response_body=it->response_body;
-            myCache.erase(it);
-            myCache.push_back(move2back);
-            return move2back.response_body;
-        }
-    }
-    
 
-    
-    return "";
-}
-
-void cache_response(string url,string response){
-    
-    if(DEBUG)cout<<"Caching Response"<<endl;
-    CacheEntry entry;
-    entry.p_url=url;
-    entry.response_body=response;
-    /*remove the last recently used entry(one at the back of deque)*/
-    
-    while(myCache.size()>= CacheSize) {
-        if(DEBUG) cout<<"Not enough space in cache, popthe last one"<<endl;
-        myCache.pop_back();
-        
-    }
-    myCache.push_front(entry);
-    
-}
 
 /* a possibly handy function that we provide to parse the address */
 void parseAddress(char* url, char* host, char** file, int* serverPort){
@@ -163,7 +123,7 @@ void parseAddress(char* url, char* host, char** file, int* serverPort){
 
 
 
-int conn_server(char * hostname, int serverPort){
+int conn_server(const char * http_request,char * hostname, int serverPort){
     int sock;
     struct sockaddr_in server_addr;
     struct hostent *hp;
@@ -171,7 +131,7 @@ int conn_server(char * hostname, int serverPort){
     if ((sock=socket(AF_INET, SOCK_STREAM/* use tcp*/, 0))<0) {
         perror("Create socket error:");
     }
-    if (DEBUG) printf("Connect Server socket created\n");
+    if (DEBUG) printf("connet Server socket created\n");
     
     /* Fill in the server's IP address and port */
     if ((hp = gethostbyname(hostname)) == NULL){
@@ -192,73 +152,37 @@ int conn_server(char * hostname, int serverPort){
     return sock;
 }
 
-void proxy_to_browser(int new_s, string response){
-    
-    size_t nleft = response.length();
-    ssize_t nwritten;
-    char *bufp =strdup(response.c_str());
-    
-    while (nleft > 0) {
-        if ((nwritten = write(new_s, bufp, nleft)) <= 0) {
-            if (errno == EINTR) // interrupted by sig handler return
-                nwritten = 0;    // and call write() again
-            else
-                break;       // errorno set by write()
-        }
-        nleft -= nwritten;
-        bufp += nwritten;
-    }
-    
-    
-    
-}
 
 /* 4.Upon receiving a request for a new connection, the proxy should spawn a thread to process it.*/
 
 void *webtalk(void * socket_desc){
     
-    
     pthread_mutex_lock(&mutex);
+    
     if(DEBUG)printf("Enter handler\n");
     
-    int browserfd= *(int *)socket_desc;
-    int serverPort=80;
+    int new_s= *(int *)socket_desc;
+    int serverPort;
     
     char url[MAX_MSG_LENGTH];
     char buf[MAX_MSG_LENGTH];
     char host[MAX_MSG_LENGTH];
     char  *token,*cmd, *version, *file, *brkt;
-    
+    ssize_t bytes_read;
     token=" \r\n";
     
-    rio_t browser;
-    rio_readinitb(&browser,browserfd);
-    
-    /*Read the first line from browser*/
-    int bytes_read=0;
-    int tries=0;
-    
-    while((bytes_read = Rio_readlineb(&browser, buf, MAX_MSG_LENGTH)) < 1)
-    {
-        if(tries < 10)
-            ++tries;
-        else
-            return NULL;
-        continue;
+    if ( (bytes_read = read (new_s,buf,sizeof(buf)) ) >0){
+        if(DEBUG)printf("read succeed\n");
+        if(DEBUG)printf("%s\n", buf);
     }
-
+    
     buf[bytes_read]=0;
     
-
-    
-    
-    /*MIGHT BE USEFUL FOR PERSISTENT CONNECTION*/
     bool keep_alive=false;
     char * p=strstr(buf, "Connection: keep-alive\r\n");
     if(p!=NULL){
         keep_alive=true;
     }
-    
     
     /*Parsing HTTP*/
     char *nbuf=strdup(buf);
@@ -267,121 +191,77 @@ void *webtalk(void * socket_desc){
     version = strtok_r(NULL, token, &brkt);
     parseAddress(url,host,&file, &serverPort);
     
-    string request;
-    request.assign(buf);
-    
-    /*
-    while((bytes_read = Rio_readlineb(&browser, buf, MAX_MSG_LENGTH)) > 0)
-    {
-        cout<<"Get buffer and append to request:"<<buf<<endl;
-        request+=buf;
-        if (strcmp(buf,"\r\n") == 0) {
-            break;
-        }
-        
-    }
-    */
-    
-    char *request_buf=strdup(request.c_str());
-    
-    
-    if(DEBUG)printf("read succeed\n");
-    if(DEBUG)printf("HTTP REQUEST IS : %s\n", request_buf);
-    if (DEBUG) cout<<request<<endl;
-    
-    string response;
-
+    char reply[MAX_MSG_LENGTH*3];
     
     if (strcmp(cmd, "GET")==0) {
-        if(DEBUG) cout<<"GET request received"<<endl;
-        
-       // response=response_from_cache(url);
-        
-        if (false){//response.length()>0) {/*return from cache*/
-            cout<<"Response from cache"<<endl;
-            /*foward http_resonse to browser*/
-            proxy_to_browser(browserfd, response);
-            
+        if (false) {
+            /*return from cache*/
         }
-        
-        else{/*read from server*/
+        else{
+            /*read from server*/
             
-            /*send http_request to server*/
-            
-            int byteCount;
-            
-            
-            cout<<"Reading from server"<<endl;
-            int serverfd=conn_server(host,serverPort );
+            int sock=conn_server(buf, host,serverPort );
             ssize_t recv_len = 0;
             
-            char buf1[MAX_MSG_LENGTH];
-            cout<<"request sending"<<buf<<endl;
-            Rio_writen(serverfd, (void *)buf, strlen(buf));
-            //fprintf(stdout, "%s", buf1);fflush(stdout);
-            /* sprintf(buf3, "Host: %s:%d\r\n", host, serverPort); */
-            /* Rio_writen(serverfd, (void *)buf3, strlen(buf3)); */
-            while((byteCount = Rio_readlineb(&browser,buf1 ,MAX_MSG_LENGTH)) > 0) // > 0 or >= 0?
-            {
-                printf("after %s",buf1);
-                buf1[byteCount] = 0;
-                if(strcmp(buf1, "\r\n") == 0)
-                    break;
-                /* fprintf(stdout, buf1);fflush(stdout); */
-                Rio_writen(serverfd, (void *)buf1, byteCount);
-
-            }
-            
-          
-            
-            
-            /*
-            
-            if (send(serverfd,request_buf, sizeof(buf), 0) < 0) {
+            if (send(sock, buf, MAX_MSG_LENGTH, 0) < 0) {
                 perror("Send error:");
+                
+            }
+            bzero(reply, sizeof(reply));
+            
+            while((recv_len = read(sock, reply,sizeof(reply)))>0){
+                size_t nleft = recv_len;
+                ssize_t nwritten;
+                char *bufp =  reply;
+                
+                while (nleft > 0) {
+                    if ((nwritten = write(new_s, bufp, nleft)) <= 0) {
+                        if (errno == EINTR) // interrupted by sig handler return
+                            nwritten = 0;    // and call write() again
+                        else
+                            break;       // errorno set by write()
+                    }
+                    if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
+                    nleft -= nwritten;
+                    bufp += nwritten;
+                }
+                /*
+                 if (send(new_s, reply, sizeof(reply), 0)<0) {
+                 if(errno==EINTR)continue;
+                 perror("Failed to send response to browser");
+                 }
+                 
+                 if(DEBUG)printf("Server reply:\n%s\n", reply);
+                 */
+                memset(reply, 0, sizeof(reply));
+                
             }
             
-            */
-            
-            
-            
-            
-            /*response from server*/
-            
-            
-            char temp_reply[MAX_MSG_LENGTH];
-            
-            
-            while((byteCount = Rio_readp(serverfd, temp_reply, MAX_MSG_LENGTH)) > 0)
-            {
-                temp_reply[byteCount] = 0;
-                /* fprintf(stdout, buf1);fflush(stdout); */
-                cout<<"***************response is :"<<temp_reply<<endl;
-                Rio_writen(browserfd, temp_reply, byteCount);
-            }
-            
-            
-        
             /*
-            response=socket_read(serverfd);
+             if (recv_len < 0) {
+             perror("Recv error:");
+             
+             }
+             */
+            reply[recv_len] = 0;
             
-            if(DEBUG) cout<<"HTTP Response is: "<<response<<endl;
-            proxy_to_browser(browserfd,response);
-            */
             
             
-            //cache_response(url,response);
+            /*!!!!!TODO:cache or send response back to browser
+             if (cacheble()) {
+             add to cache linkedlist
+             cache_http_response(reply);
+             }
+             else{
+             send back to browser
+             proxyToBrowser(reply);
+             }
+             */
+            
+            
         }
-        
-        
     }
-    
-    close(browserfd);
     pthread_mutex_unlock(&mutex);
-    if (DEBUG) cout<<"Exit Handler"<<endl;
-    
-    
+    close(new_s);
     return NULL;
 }
-
-
