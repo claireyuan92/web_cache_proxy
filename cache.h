@@ -42,28 +42,13 @@ typedef struct CacheEntry{
     //struct CacheEntry * next;
 }CacheEntry;
 
+/*This is a LRU cache maintained by a FIFO deque, pop the front when there is no enough room in the cache, push back when a new entry comes in */
+
 deque<CacheEntry> myCache;
 
-string response_from_cache(string url);
 
-void cache_response(string url,string response);
-
-string socket_read(int fd){
-    string result;
-    
-    char buf[MAX_MSG_LENGTH];
-    int byteCount=0;
-    rio_t my_rio;
-    bzero(buf,sizeof(buf));
-    Rio_readinitb(&my_rio, fd);
-    while ( (byteCount = Rio_readlineb(&my_rio,buf,MAX_MSG_LENGTH))>0) {
-        //if (DEBUG) cout<<"Bytes read from server in this loop:"<<byteCount<<endl;
-        result+=buf;
-        memset(buf,0,sizeof(buf));
-    }
-    return result;
-}
-
+void cache_response(CacheEntry entry);
+bool response_from_cache(int browserfd, char * url);
 
 
 

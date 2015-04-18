@@ -3,6 +3,7 @@
 
 
 pthread_mutex_t mutex;
+int CacheSize;
 
 
 void *webtalk(void * socket_desc);
@@ -23,7 +24,7 @@ int main(int argc,char **argv){
         return 1;
     }
     
-    cache_size =atoi(argv[2]);
+    CacheSize =atoi(argv[2]);
     
     //Implementation Details: 2. Make sure that your proxy ignores SGIPIPE signals by installing the ignore function as handler.
     
@@ -162,7 +163,7 @@ void *webtalk(void * socket_desc){
     if(DEBUG)printf("Enter handler\n");
     
     int new_s= *(int *)socket_desc;
-    free(socket_desc);
+    
     
     int serverPort;
     
@@ -198,11 +199,12 @@ void *webtalk(void * socket_desc){
     char reply[MAX_MSG_LENGTH];
     
     if (strcmp(cmd, "GET")==0) {
-        if (false) {
+        if (response_from_cache(new_s,url)) {
             /*return from cache*/
+            if(DEBUG)cout<<"Response from Cache"<<endl;
         }
         else{
-            
+            if (DEBUG) cout<<"Querying from server"<<endl;
             /*===Cache Response Start===*/
             CacheEntry this_entry;
             this_entry.p_url=strdup(url);
@@ -210,7 +212,7 @@ void *webtalk(void * socket_desc){
             /*Connect to the server*/
             int sock=conn_server(buf, host,serverPort );
             ssize_t recv_len = 0;
-            
+                //sending request
             if (send(sock, buf, MAX_MSG_LENGTH, 0) < 0) {
                 perror("Send error:");
                 
@@ -238,8 +240,11 @@ void *webtalk(void * socket_desc){
                     bufp += nwritten;
                     
                 }
-               // this_entry.response_body.
+                
                 if(DEBUG) cout<<"reply buffer sent!"<<endl;
+                
+                /*===Add this reply to response body===*/
+                this_entry.response_body.push_back(reply);
                 
                 memset(reply, 0, sizeof(reply));
                
@@ -247,13 +252,52 @@ void *webtalk(void * socket_desc){
             
             /*Close server socket*/
             close(sock);
+            
+            /*===Add this entry to Cache*/
             if(DEBUG)cout<<"Whole response received"<<endl;
+            cache_response(this_entry);
+            
             
         }
     }
     /*close browser socket*/
     close(new_s);
+    free(socket_desc);
     pthread_mutex_unlock(&mutex);
     
     return NULL;
+}
+
+
+void cache_response(CacheEntry entry){
+    if (DEBUG) cout<<"Caching Response"<<endl;
+    
+    while (myCache.size() >= CacheSize) {
+        if(DEBUG) cout<<"No enough space in cache, pop the front"<<endl;
+        myCache.pop_front();
+    }
+    myCache.push_back(entry);
+    if (DEBUG) cout<<"Response Cached"<<endl;
+}
+
+bool response_from_cache(int browserfd, char *url){
+ for (deque<CacheEntry>::iterator it=myCache.begin(); it!=myCache.end(); ++it) {
+     if (strcmp(it->p_url,url)==0) {
+         CacheEntry move2back;
+         move2back.p_url=it->p_url;
+         move2back.response_body=it->response_body;
+         
+         while (it->response_body.size() >0) {
+             if (send(browserfd, it->response_body.front(), sizeof(it->response_body.front()), 0) < 0) {
+                 perror("Send error:");
+                 
+             }
+             it->response_body.pop_front();
+         }
+         return true;
+     }
+ 
+ }
+    return false;
+
 }
