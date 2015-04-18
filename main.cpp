@@ -173,7 +173,7 @@ void *webtalk(void * socket_desc){
     token=" \r\n";
     
     if ( (bytes_read = read (new_s,buf,MAX_MSG_LENGTH) ) >0){
-        if(DEBUG)printf("read succeed\n");
+        if(DEBUG)cout<<"read succeed and bytes read:"<<bytes_read<<endl;
         buf[bytes_read]=0;
         if(DEBUG)cout<<buf<<endl;
         
@@ -200,7 +200,7 @@ void *webtalk(void * socket_desc){
     
     char reply[MAX_MSG_LENGTH];
     
-    if (strcmp(cmd, "GET")==0) {
+    if (cmd !=NULL && strcmp(cmd, "GET")==0) {
         if (response_from_cache(new_s,url)) {
             /*return from cache*/
             if(DEBUG)cout<<"Response from Cache succeed"<<endl;
@@ -242,8 +242,9 @@ void *webtalk(void * socket_desc){
                     bufp += nwritten;
                     
                 }
+                string str(reply);
                 
-                if(DEBUG) cout<<"reply buffer sent!"<<endl;
+                if(DEBUG) cout<<"reply buffer sent:"<<reply<<endl;
                 
                 /*===Add this reply to response body===*/
                // reply[recv_len]=0;
