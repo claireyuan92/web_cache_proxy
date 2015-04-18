@@ -289,7 +289,7 @@ void cache_response(CacheEntry entry){
     if (DEBUG) {
         cout<<"*************Cached response url is :"<< entry.p_url;
     
-        for (deque<string>::reverse_iterator it=entry.response_body.rbegin(); it!=entry.response_body.rend(); ++it) {
+        for (deque<string>::iterator it=entry.response_body.begin(); it!=entry.response_body.end(); ++it) {
             cout<<"*****************Cahced response http is :"<<*it<<endl;
         }
     }
@@ -317,8 +317,6 @@ bool response_from_cache(int browserfd, char *url){
                 // do stuff
                 
                 //char *buf=strdup(it->response_body.front().c_str());
-                
-                
                 
                 size_t nleft = strlen(cstr);
                 ssize_t nwritten;
