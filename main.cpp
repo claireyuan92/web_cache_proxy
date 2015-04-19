@@ -1,14 +1,15 @@
 #include "cache.h"
-#include <math.h>
-#include <cmath>
+#include <fstream>
+#include "csapp.h"
 #define MAX_BACK_LOG (5)
 
+using std::ofstream;
 
 pthread_mutex_t mutex;
 int CacheSize;
 
 int min(int a,int b){
-  return((a>b)?b:a);
+    return((a>b)?b:a);
 }
 
 void *webtalk(void * socket_desc);
@@ -16,7 +17,6 @@ void *webtalk(void * socket_desc);
 int main(int argc,char **argv){
     
     uint16_t port;
-    int cache_size;
     
     if(argc < 3){
         printf("Command should be: <port>  <size of cache in MBs>\n");
@@ -163,11 +163,11 @@ int conn_server(const char * http_request,char * hostname, int serverPort){
 
 void *webtalk(void * socket_desc){
     
-  pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&mutex);
     
     if(DEBUG)printf("Enter handler\n");
     int new_s= *(int *)socket_desc;
-    int serverPort;
+    int serverPort=80;
     
     
     
@@ -199,7 +199,7 @@ void *webtalk(void * socket_desc){
         parseAddress(url,host,&file, &serverPort);
     }
     else{
-        perror("Read error:");
+        perror("Read from browser error:");
     }
     
     
@@ -217,24 +217,27 @@ void *webtalk(void * socket_desc){
             this_entry.p_url=strdup(url);
             
             /*Connect to the server*/
-            int sock=conn_server(buf, host,serverPort );
+            int sock=conn_server(buf, host,serverPort);
             ssize_t recv_len = 0;
             //sending request
-	    int sent_bytes;
+            int sent_bytes;
             if ((sent_bytes=send(sock, buf, MAX_MSG_LENGTH, 0)) < 0) {
                 perror("Send error:");
                 
             }
-	    if(DEBUG)cout<<"sent_bytes"<<sent_bytes<<endl;
+            if(DEBUG)cout<<"sent_bytes"<<sent_bytes<<endl;
             bzero(reply, sizeof(reply));
             
+            
+            ofstream sendfile;
+            sendfile.open("sendfile.txt");
             /*Read from server*/
             while((recv_len = read(sock, reply,sizeof(reply)))> 0){
                 
                 size_t nleft = recv_len;
                 ssize_t nwritten;
                 
-                
+               
                 char *bufp =  reply;
                 
                 while (nleft > 0) {
@@ -244,25 +247,32 @@ void *webtalk(void * socket_desc){
                         else
                             break;       // errorno set by write()
                     }
-                    //if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
+                    sendfile<<bufp;
+                    if(DEBUG)printf("Server reply bufp:\n%s\n ", bufp);
                     nleft -= nwritten;
                     bufp += nwritten;
                     
                 }
-                string str(reply);
                 
-                if(DEBUG) cout<<"reply buffer sent:"<<reply<<endl;
+                
+                
+                
+               //string str(reply);
+                
+               // if(DEBUG) cout<<"reply buffer sent:"<<reply<<endl;
                 
                 /*===Add this reply to response body===*/
-               // reply[recv_len]=0;
+                // reply[recv_len]=0;
                 
                 this_entry.response_body+=reply;
                 
-                if(DEBUG) cout<<"*************Thie entry is :"<<this_entry.response_body<<endl;
+                if(DEBUG) cout<<"*************This entry is :"<<this_entry.response_body<<endl;
                 
                 memset(reply, 0, sizeof(reply));
             }
             
+            sendfile<<endl;
+            sendfile.close();
             /*Close server socket*/
             close(sock);
             
@@ -294,68 +304,109 @@ void cache_response(CacheEntry entry){
     }
     myCache.push_back(entry);
     
+    ofstream myfile;
     if (DEBUG) {
-        cout<<"*************Cached response url is :"<< entry.p_url;
-	cout<<"*****************Cahced response http is :"<<entry.response_body<<endl;
-	/*
-        for (deque<string>::iterator it=entry.response_body.begin(); it!=entry.response_body.end(); ++it) {
-            cout<<"*****************Cahced response http is :"<<*it<<endl;
-        }
-	*/
+      
+        myfile.open ("Cache.txt");
+        //myfile<<"*************Cached response url is :"<< entry.p_url;
+        myfile<< entry.response_body<<endl;
+        /*
+         for (deque<string>::iterator it=entry.response_body.begin(); it!=entry.response_body.end(); ++it) {
+         cout<<"*****************Cahced response http is :"<<*it<<endl;
+         }
+         */
     }
+    myfile.close();
     if (DEBUG) cout<<"Response Cached"<<endl;
 }
 
 bool response_from_cache(int browserfd, char *url){
     for (deque<CacheEntry>::iterator it=myCache.begin(); it!=myCache.end(); ++it) {
         if (strcmp(it->p_url,url)==0) {
-            if(DEBUG)cout<<"HITTTTTTTTT!!!!!!Response from Cache"<<endl;
+            if(DEBUG)cout<<"HITTTTTTTTT!!!!!!Response from Cache"<<browserfd<<endl;
             CacheEntry move2back;
             move2back.p_url=it->p_url;
             move2back.response_body=it->response_body;
             
-	    // while (it->response_body.size() >0) {
-	    if (it->response_body.size() >0) {
+            // while (it->response_body.size() >0) {
+            if (it->response_body.size() >0) {
+                ofstream myfile;
+                
+                myfile.open("Res_from_Cache.txt");
+              
+
                 if(DEBUG){
-                    cout<<"Browser fd is :"<<browserfd<<endl;
-                    cout<<"Cache Entry is: "<<it->response_body<<endl;
-                    
+                   // cout<<"Browser fd is :"<<browserfd<<endl;
+                   // cout<<"Cache Entry is: "<<it->response_body<<endl;
+                   // myfile<<"*************Cached response url is :"<< it->p_url;
+                   
                 }
+                
                 
                 string str = it->response_body;
                 char *cstr = new char[str.length() + 1];
+                
+                if(DEBUG)cout<<"the responsbody is "<<str<<endl;
+                
                 strcpy(cstr, str.c_str());
+                cstr[str.length()]=0;
                 // do stuff
                 
                 //char *buf=strdup(it->response_body.front().c_str());
-                
+               // char * random="what ???????";
                 size_t nleft = strlen(cstr);
                 ssize_t nwritten;
                 
                 
+                
                 char *bufp =  cstr;
                 
+                //if(DEBUG)cout<<"Buffer going to be sent is :"<<cstr<<endl;
+                myfile<<bufp<<endl;
+                myfile.close();
+                /*
+                if(send(browserfd, bufp, strlen(bufp), 0)<=0){
+                    perror("send to browser error:");
+                }
+                
+                */
+                
+                
+                int i=0;
                 while (nleft > 0) {
-		  if ((nwritten = send(browserfd, bufp,min(nleft,MAX_MSG_LENGTH),0)) <= 0) {
+                    
+                    //if(DEBUG) cout<<"Enter while times"<<i<<endl;
+                    
+                    if ((nwritten = send(browserfd, bufp,strlen(bufp),0)) < 0) {
+                 
                         if (errno == EINTR) // interrupted by sig handler return
                             nwritten = 0;    // and call write() again
-                        else
+                        else{
+                            perror("send from cache error:");
                             break;       // errorno set by write()
+                        }
+                        cout<<browserfd<<endl;
+                        perror("send error:");
+                       // if(DEBUG) cout<<"bytes written in this loop"<<nwritten<<endl;
                     }
-                    if(DEBUG)printf("Server reply bufp:\n%s\n", bufp);
+                    
+                  //  if(DEBUG) cout<<"bytes written in this loop"<<nwritten<<endl;
                     nleft -= nwritten;
                     bufp += nwritten;
+                    i++;
                     
                 }
-
+    
+                
                 delete [] cstr;
                 
                 //it->response_body.pop_front();
-               
+                
             }
             
             myCache.erase(it);
             myCache.push_back(move2back);
+            
             return true;
         }
         
