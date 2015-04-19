@@ -23,8 +23,9 @@
 #include <stdbool.h>
 #include <deque>
 #include <string>
+#include <string.h>
 #include <queue>
-#include "csapp.h"
+//#include "csapp.h"
 
 #define DEBUG 1
 #define MAX_MSG_LENGTH 8192
@@ -38,7 +39,7 @@ using std::queue;
 
 typedef struct CacheEntry{
     char *p_url;
-    deque<string> response_body;
+    string response_body;
     //struct CacheEntry * next;
 }CacheEntry;
 

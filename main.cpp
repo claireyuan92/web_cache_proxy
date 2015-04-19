@@ -1,10 +1,15 @@
 #include "cache.h"
+#include <math.h>
+#include <cmath>
 #define MAX_BACK_LOG (5)
 
 
 pthread_mutex_t mutex;
 int CacheSize;
 
+int min(int a,int b){
+  return((a>b)?b:a);
+}
 
 void *webtalk(void * socket_desc);
 
@@ -158,7 +163,7 @@ int conn_server(const char * http_request,char * hostname, int serverPort){
 
 void *webtalk(void * socket_desc){
     
-    pthread_mutex_lock(&mutex);
+  pthread_mutex_lock(&mutex);
     
     if(DEBUG)printf("Enter handler\n");
     int new_s= *(int *)socket_desc;
@@ -215,10 +220,12 @@ void *webtalk(void * socket_desc){
             int sock=conn_server(buf, host,serverPort );
             ssize_t recv_len = 0;
             //sending request
-            if (send(sock, buf, MAX_MSG_LENGTH, 0) < 0) {
+	    int sent_bytes;
+            if ((sent_bytes=send(sock, buf, MAX_MSG_LENGTH, 0)) < 0) {
                 perror("Send error:");
                 
             }
+	    if(DEBUG)cout<<"sent_bytes"<<sent_bytes<<endl;
             bzero(reply, sizeof(reply));
             
             /*Read from server*/
@@ -249,9 +256,9 @@ void *webtalk(void * socket_desc){
                 /*===Add this reply to response body===*/
                // reply[recv_len]=0;
                 
-                this_entry.response_body.push_back(reply);
+                this_entry.response_body+=reply;
                 
-                if(DEBUG) cout<<"*************Thie entry is :"<<this_entry.response_body.back()<<endl;
+                if(DEBUG) cout<<"*************Thie entry is :"<<this_entry.response_body<<endl;
                 
                 memset(reply, 0, sizeof(reply));
             }
@@ -289,10 +296,12 @@ void cache_response(CacheEntry entry){
     
     if (DEBUG) {
         cout<<"*************Cached response url is :"<< entry.p_url;
-    
+	cout<<"*****************Cahced response http is :"<<entry.response_body<<endl;
+	/*
         for (deque<string>::iterator it=entry.response_body.begin(); it!=entry.response_body.end(); ++it) {
             cout<<"*****************Cahced response http is :"<<*it<<endl;
         }
+	*/
     }
     if (DEBUG) cout<<"Response Cached"<<endl;
 }
@@ -305,14 +314,15 @@ bool response_from_cache(int browserfd, char *url){
             move2back.p_url=it->p_url;
             move2back.response_body=it->response_body;
             
-            while (it->response_body.size() >0) {
+	    // while (it->response_body.size() >0) {
+	    if (it->response_body.size() >0) {
                 if(DEBUG){
                     cout<<"Browser fd is :"<<browserfd<<endl;
-                    cout<<"Cache Entry is: "<<it->response_body.front()<<endl;
+                    cout<<"Cache Entry is: "<<it->response_body<<endl;
                     
                 }
                 
-                string str = it->response_body.front();
+                string str = it->response_body;
                 char *cstr = new char[str.length() + 1];
                 strcpy(cstr, str.c_str());
                 // do stuff
@@ -326,7 +336,7 @@ bool response_from_cache(int browserfd, char *url){
                 char *bufp =  cstr;
                 
                 while (nleft > 0) {
-                    if ((nwritten = send(browserfd, bufp, nleft,0)) <= 0) {
+		  if ((nwritten = send(browserfd, bufp,min(nleft,MAX_MSG_LENGTH),0)) <= 0) {
                         if (errno == EINTR) // interrupted by sig handler return
                             nwritten = 0;    // and call write() again
                         else
@@ -340,7 +350,7 @@ bool response_from_cache(int browserfd, char *url){
 
                 delete [] cstr;
                 
-                it->response_body.pop_front();
+                //it->response_body.pop_front();
                
             }
             
