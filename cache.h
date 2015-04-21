@@ -27,7 +27,7 @@
 #include <queue>
 //#include "csapp.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #define MAX_MSG_LENGTH 8192
 
 using std::deque;
@@ -40,6 +40,7 @@ using std::queue;
 typedef struct CacheEntry{
     char *p_url;
     char *response_body;
+    int buffersize;
     //struct CacheEntry * next;
 }CacheEntry;
 

@@ -1,12 +1,15 @@
 #include "cache.h"
 #include <fstream>
-#include "csapp.h"
+
+
 #define MAX_BACK_LOG (5)
 
 using std::ofstream;
 
 pthread_mutex_t mutex;
-int CacheSize;
+
+long  CacheSize;
+long  CacheAvailable;
 
 int min(int a,int b){
     return((a>b)?b:a);
@@ -29,8 +32,8 @@ int main(int argc,char **argv){
         return 1;
     }
     
-    CacheSize =atoi(argv[2]);
-    
+    CacheAvailable =atoi(argv[2])*1024*1024;
+    CacheSize =atoi(argv[2])*1024*1024;
     //Implementation Details: 2. Make sure that your proxy ignores SGIPIPE signals by installing the ignore function as handler.
     
     signal(SIGPIPE,SIG_IGN);
@@ -49,7 +52,7 @@ int main(int argc,char **argv){
         perror("simplex-talk: socket\n");
         exit(1);
     }
-    if(DEBUG)printf("Socket created\n");
+    printf("Socket created\n");
     
     
     if( (bind(listenfd,(struct sockaddr *)&client_addr,addr_len)) < 0) {
@@ -57,10 +60,10 @@ int main(int argc,char **argv){
         exit(1);
     }
     
-    if(DEBUG)printf("Bind port succeed\n");
+    printf("Bind port succeed\n");
     
     listen(listenfd, MAX_BACK_LOG);
-    if(DEBUG)printf("Proxy is Lisenning\n");
+    printf("Proxy is Lisenning\n");
     
     
     pthread_t thread_id;
@@ -72,10 +75,10 @@ int main(int argc,char **argv){
     /*wait for connecction, then accept*/
     
     while(1){
-        if(DEBUG)cout<<"Enter Handler"<<endl;
+        
         int *new_s=(int *)malloc(sizeof(int));
         if((*new_s = accept(listenfd, (struct sockaddr *)&client_addr,&addr_len ))>=0){
-            if(DEBUG)printf("Accepted connection\n");
+            printf("Accepted connection\n");
             pthread_create(&thread_id, NULL, webtalk, (void *)new_s);
             pthread_detach(thread_id);
         }
@@ -137,7 +140,7 @@ int conn_server(const char * http_request,char * hostname, int serverPort){
     if ((sock=socket(AF_INET, SOCK_STREAM/* use tcp*/, 0))<0) {
         perror("Create socket error:");
     }
-    if (DEBUG) printf("connet Server socket created\n");
+
     
     /* Fill in the server's IP address and port */
     if ((hp = gethostbyname(hostname)) == NULL){
@@ -165,7 +168,7 @@ void *webtalk(void * socket_desc){
     
     pthread_mutex_lock(&mutex);
     
-    if(DEBUG)printf("Enter handler\n");
+    if(DEBUG)printf("Established a thread\n");
     int new_s= *(int *)socket_desc;
     int serverPort=80;
     
@@ -198,20 +201,19 @@ void *webtalk(void * socket_desc){
         version = strtok_r(NULL, token, &brkt);
         parseAddress(url,host,&file, &serverPort);
     }
-    else{
-        perror("Read from browser error:");
-    }
+  
     
     
-    char reply[MAX_MSG_LENGTH];
+    //char *reply=new char[MAX_MSG_LENGTH+1];
+    char reply[MAX_MSG_LENGTH+1];
     
     if (cmd !=NULL && strcmp(cmd, "GET")==0) {
         if (response_from_cache(new_s,url)) {
             /*return from cache*/
-            if(DEBUG)cout<<"Response from Cache succeed"<<endl;
+            cout<<"Response from Cache succeed"<<endl;
         }
         else{
-            if (DEBUG) cout<<"Querying from server"<<endl;
+            cout<<"Querying from server"<<endl;
             /*===Cache Response Start===*/
             CacheEntry this_entry;
             this_entry.p_url=strdup(url);
@@ -233,22 +235,21 @@ void *webtalk(void * socket_desc){
             sendfile.open("sendfile.txt");
             sendfile<<url<<endl;
             
-            size_t receiv_buffer_size=0;
+            int receiv_buffer_size=0;
             
             /*Read from server*/
             while((recv_len = read(sock, reply,MAX_MSG_LENGTH))>0){
                 
-                cout<<"**************************!!!!!!!!!!!!!!!!!"<<recv_len<<endl;
                 reply[recv_len]=0;
                 if (this_entry.response_body) {
-                    this_entry.response_body=(char*)realloc(this_entry.response_body, (receiv_buffer_size+recv_len)*sizeof(*this_entry.response_body));
+                    this_entry.response_body=(char*)realloc(this_entry.response_body, (receiv_buffer_size+recv_len+1)*sizeof(*this_entry.response_body));
                 }
                 else {
-                    this_entry.response_body=(char*)malloc(recv_len*sizeof(*this_entry.response_body));
+                    this_entry.response_body=(char*)malloc((recv_len+1)*sizeof(*this_entry.response_body));
                 }
+                
                 bcopy(reply, this_entry.response_body+receiv_buffer_size, recv_len*sizeof(*this_entry.response_body));
                 receiv_buffer_size+=recv_len;
-                
                 
                 size_t nleft = recv_len;
                 ssize_t nwritten;
@@ -270,28 +271,21 @@ void *webtalk(void * socket_desc){
                     
                     
                 }
+                this_entry.buffersize=receiv_buffer_size;
+                if(DEBUG) cout<<"*************This entry is :"<<strlen(this_entry.response_body)<<endl;
                 
-                
-                //string str(reply);
-                
-                // if(DEBUG) cout<<"reply buffer sent:"<<reply<<endl;
-                
-                /*===Add this reply to response body===*/
-                // reply[recv_len]=0;
-                
-                
-                if(DEBUG) cout<<"*************This entry is :"<<this_entry.response_body<<endl;
-                
-                memset(reply, 0, sizeof(reply));
+                memset(reply, 0, MAX_MSG_LENGTH+1);
             }
             
             sendfile<<endl;
             sendfile.close();
+            
+            //delete [] reply;
             /*Close server socket*/
             close(sock);
             
             /*===Add this entry to Cache*/
-            if(DEBUG)cout<<"Whole response received"<<endl;
+            cout<<"Whole response received"<<endl;
             cache_response(this_entry);
             
             
@@ -299,75 +293,76 @@ void *webtalk(void * socket_desc){
     }
     
     /*close browser socket*/
-    if (DEBUG) cout<<"Closing socket"<<endl;
+    cout<<"Closing socket"<<endl;
     close(new_s);
     free(socket_desc);
     pthread_mutex_unlock(&mutex);
-    if (DEBUG) cout<<"EXIT HANDLER"<<endl;
+    cout<<"Thread job completed"<<endl;
     
     return NULL;
 }
 
 
 void cache_response(CacheEntry entry){
+    
     if (DEBUG) cout<<"Caching Response"<<endl;
-    
-    while (myCache.size() >= CacheSize) {
-        if(DEBUG) cout<<"No enough space in cache, pop the front"<<endl;
-        free(myCache.front().response_body);
-        myCache.pop_front();
-    }
-    myCache.push_back(entry);
-    
-    ofstream myfile;
-    if (DEBUG) {
+    long entrysize=entry.buffersize+strlen(entry.p_url);
+    if (entrysize<CacheSize) {
+        while (CacheAvailable < entrysize) {
+            if(DEBUG) cout<<"No enough space in cache, pop the front"<<endl;
+            free(myCache.front().response_body);
+            CacheAvailable+=myCache.front().buffersize;
+            myCache.pop_front();
+        }
         
-        myfile.open ("Cache.txt");
-        myfile<<entry.p_url<<endl;
-        myfile<< entry.response_body<<endl;
+        myCache.push_back(entry);
+        CacheAvailable-=(myCache.back().buffersize+strlen(myCache.back().p_url));
         
+        if (DEBUG) cout<<"Response Cached"<<endl;
     }
-    myfile.close();
-    if (DEBUG) cout<<"Response Cached"<<endl;
+    else{
+        
+        cout<<"Entry size is greater than the whole Cache Size"<<endl;
+    }
 }
 
 bool response_from_cache(int browserfd, char *url){
     
     for (deque<CacheEntry>::iterator it=myCache.begin(); it!=myCache.end(); ++it) {
         if (strcmp(it->p_url,url)==0) {
-            if(DEBUG)cout<<"HITTTTTTTTT!!!!!!Response from Cache"<<browserfd<<endl;
+            
+            cout<<"HIT Cache"<<endl;
+            
             CacheEntry move2back;
-            move2back.p_url=it->p_url;
-            move2back.response_body=strdup(it->response_body);
+            move2back.p_url=strdup(it->p_url);
+            move2back.response_body=(char *)malloc(it->buffersize);
+            move2back.buffersize=it->buffersize;
+            memcpy(move2back.response_body, it->response_body,it->buffersize);
+            
             
             if(DEBUG)cout<<it->p_url<<endl;
             if (it->response_body!=NULL) {
                 
                 
-                size_t nleft = sizeof(it->response_body);
+                int nleft = it->buffersize;
                 ssize_t nwritten;
                 
                 
-                cout<<it->response_body<<endl;
-                char *bufp = strdup(it->response_body);
+                
+                char *bufp =it->response_body;
                 if(DEBUG) cout<<it->response_body<<endl;
                 
                 while (nleft > 0) {
                     
-                    //if(DEBUG) cout<<"Enter while times"<<i<<endl;
                     
-                    if ((nwritten = send(browserfd, bufp,strlen(bufp),0)) <= 0) {
-                        
+                    if ((nwritten = send(browserfd,bufp,min(nleft, MAX_MSG_LENGTH),0)) <= 0) {
                         if (errno == EINTR) // interrupted by sig handler return
                             nwritten = 0;    // and call write() again
-                        
                         else{
                             break;       // errorno set by write()
                         }
-                        
                     }
                     nleft -= nwritten;
-                    
                     bufp += nwritten;
                     
                 }
