@@ -39,7 +39,7 @@ using std::queue;
 
 typedef struct CacheEntry{
     char *p_url;
-    string response_body;
+    char *response_body;
     //struct CacheEntry * next;
 }CacheEntry;
 
@@ -54,3 +54,4 @@ bool response_from_cache(int browserfd, char * url);
 
 
 #endif /* defined(__proxy__cache__) */
+
